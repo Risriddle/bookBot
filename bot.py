@@ -1,7 +1,7 @@
 import os
 import fitz  # PyMuPDF
 import telebot
-
+from flask import Flask
 from dotenv import load_dotenv
 
 load_dotenv() 
@@ -103,8 +103,26 @@ def start(message):
 
     bot.reply_to(message, f"Highlight extraction completed for {pdf_filename}. Check the output directory for the result.")
 
+# def main():
+#     bot.polling()
+
+# if __name__ == '__main__':
+#     main()
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
 def main():
-    bot.polling()
+    # Start polling in a separate thread
+    from threading import Thread
+    Thread(target=bot.polling).start()
+
+    # Run Flask app
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
 
 if __name__ == '__main__':
     main()

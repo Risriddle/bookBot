@@ -1,7 +1,10 @@
-
+gunicorn
+Flask==3.0.3
 PyMuPDF==1.24.7
+PyMuPDFb==1.24.6
 pyTelegramBotAPI==4.15.3
 python-dotenv==1.0.1
+
 
 
 
