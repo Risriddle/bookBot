@@ -1,42 +1,34 @@
 import os
 import fitz  # PyMuPDF
-import telebot
-from flask import Flask
+from pyrogram import Client, filters
 from dotenv import load_dotenv
+from tempfile import TemporaryDirectory
 
 load_dotenv() 
- 
-# BOT_TOKEN = '6811169224:AAEknM9A2_EusaTaRMetwszkabB4fmxuZjQ'
-BOT_TOKEN=os.getenv("BOT_TOKEN")
-bot = telebot.TeleBot(BOT_TOKEN)
 
-pdf_directory = "/home/risriddle/Downloads/Books"
-output_directory = "/home/risriddle/Downloads/Jists"
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+api_id = os.getenv("API_ID")
+api_hash = os.getenv("API_HASH")
+
+print("bot is running============")
+bot = Client("pdf_highlighter_bot", api_id=api_id, api_hash=api_hash, bot_token=BOT_TOKEN)
 
 def extract_highlighted_text(pdf_path):
     doc = fitz.open(pdf_path)
     highlighted_text = []
-
     for page_num in range(len(doc)):
         page = doc.load_page(page_num)
         annots = page.annots()
-
         for annot in annots:
             if annot.type[0] == 8:  # Check if it's a highlight annotation
                 rect = annot.rect  # Annotation rectangle
                 highlights = page.get_text("text", clip=rect)  # Get text within the annotation's rectangle
                 highlighted_text.append(highlights.strip())
-    
     return highlighted_text
 
-def generate_highlight_cards(pdf_path, output_directory):
-    os.makedirs(output_directory, exist_ok=True)
-    
-    filename = os.path.basename(pdf_path)
-    pdf_name = os.path.splitext(filename)[0]
-    output_file = os.path.join(output_directory, f"{pdf_name}_highlights.html")
-
-    with open(output_file, "w", encoding="utf-8") as f_out:
+def generate_highlight_cards(pdf_path, output_path):
+    with open(output_path, "w", encoding="utf-8") as f_out:
         f_out.write("""
         <html>
         <head>
@@ -49,17 +41,15 @@ def generate_highlight_cards(pdf_path, output_directory):
                 .share-buttons { display: flex; justify-content: flex-end; margin-top: 10px; }
                 .share-button { text-decoration: none; padding: 10px 15px; margin-left: 10px; border-radius: 5px; font-size: 14px; }
                 .share-whatsapp { background-color: #25D366; color: white; }
-                 </style>
+            </style>
         </head>
         <body>
             <div class="container">
         """)
-
+        pdf_name = os.path.splitext(os.path.basename(pdf_path))[0]
         f_out.write(f"<h1>Highlights from {pdf_name}</h1>\n")
-
         # Extract highlighted text
         highlights = extract_highlighted_text(pdf_path)
-
         # Write highlight cards
         for idx, highlight in enumerate(highlights, start=1):
             encoded_highlight = highlight.replace("\n", "%0A").replace(" ", "%20")
@@ -69,60 +59,47 @@ def generate_highlight_cards(pdf_path, output_directory):
                 <p>{highlight}</p>
                 <div class="share-buttons">
                     <a href="https://api.whatsapp.com/send?text={encoded_highlight}" target="_blank" class="share-button share-whatsapp">Share on WhatsApp</a>
-                    
                 </div>
             </div>
             """)
-
         f_out.write("""
             </div>
         </body>
         </html>
         """)
+    return output_path
 
-    return output_file
+# Handler for the /start command
+@bot.on_message(filters.command("start"))
+def start(client, message):
+    message.reply_text("Send me a PDF file, and I'll extract the highlighted text for you.")
 
-@bot.message_handler(commands=['start'])
-def start(message):
-    command = message.text.split()
-    if len(command) != 2:
-        bot.reply_to(message, "Please provide the PDF filename. Usage: /start <filename>")
-        return
+# Handler for PDF file messages
+@bot.on_message(filters.document)
+def handle_pdf(client, message):
+    if message.document.mime_type == "application/pdf":
+        file_id = message.document.file_id
+        file_name = message.document.file_name
 
-    pdf_filename = command[1]
-    pdf_path = os.path.join(pdf_directory, pdf_filename)
+        message.reply_text("Downloading your PDF file...")
+        
+        with TemporaryDirectory() as temp_dir:
+            pdf_path = os.path.join(temp_dir, file_name)
+            bot.download_media(file_id, file_name=pdf_path)
 
-    if not os.path.exists(pdf_path):
-        bot.reply_to(message, f"File {pdf_filename} not found in the PDF directory.")
-        return
+            message.reply_text("Extracting highlights from your PDF...")
+            output_file = os.path.join(temp_dir, f"{os.path.splitext(file_name)[0]}_highlights.html")
+            generate_highlight_cards(pdf_path, output_file)
 
-    output_file = generate_highlight_cards(pdf_path, output_directory)
-
-    with open(output_file, "rb") as file:
-        bot.send_document(message.chat.id, file)
-
-    bot.reply_to(message, f"Highlight extraction completed for {pdf_filename}. Check the output directory for the result.")
-
-# def main():
-#     bot.polling()
-
-# if __name__ == '__main__':
-#     main()
-
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "Bot is running!"
+            with open(output_file, "rb") as file:
+                bot.send_document(message.chat.id, file)
+        
+        message.reply_text("Highlight extraction completed.")
+    else:
+        message.reply_text("Please send a PDF file.")
 
 def main():
-    # Start polling in a separate thread
-    from threading import Thread
-    Thread(target=bot.polling).start()
-
-    # Run Flask app
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    bot.run()
 
 if __name__ == '__main__':
     main()

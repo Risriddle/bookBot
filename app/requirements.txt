@@ -1,0 +1,5 @@
+pyrogram
+flask
+pymupdf
+python-dotenv
+TgCrypto
