@@ -16,6 +16,7 @@ COPY . /app
 # Ensure the start script has execute permissions
 RUN chmod +x /app/start.sh
 
+EXPOSE 80
 
 # Define the entrypoint script to use bash
 CMD ["bash", "/app/start.sh"]
